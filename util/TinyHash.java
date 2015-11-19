@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package AlexTeam.movement.util;
+package AlexTeam.util;
 
 /**
  *
@@ -13,11 +13,11 @@ package AlexTeam.movement.util;
  */
 public class TinyHash<K, E> {
 
-    private Object[][] keys;
-    private Object[][] vals;
-    private int len;
-    private int cap;
-    private int s_cap;
+    private final Object[][] keys;
+    private final Object[][] vals;
+    private final int len;
+    private final int cap;
+    private final int s_cap;
 
     public TinyHash(int cap, int s_cap) {
         keys = new Object[cap][s_cap];

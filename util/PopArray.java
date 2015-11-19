@@ -3,11 +3,12 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package AlexTeam.movement.util;
+package AlexTeam.util;
 
 /**
  *
  * @author alexhuleatt
+ * @param <K>
  */
 public class PopArray<K> {
     

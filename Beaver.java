@@ -21,9 +21,8 @@ public class Beaver {
         while (true) {
             MapLocation me = rc.getLocation();
 
-            //Direction toEnHQ = me.directionTo(enemyHQ);
             if (rc.isCoreReady()) {
-                if (me.distanceSquaredTo(enemyHQ) > 2) {
+                if (me.distanceSquaredTo(enemyHQ) > 4) {
                     mc.bug(enemyHQ);
                 }
                 else if (rc.isWeaponReady() && rc.canAttackLocation(enemyHQ)) {

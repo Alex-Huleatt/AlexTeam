@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package AlexTeam.movement.util;
+package AlexTeam.util;
 
 /**
  *
@@ -22,6 +22,5 @@ public class Rand {
         long rand = Math.abs(1 + xorshiftstar(seed));
         return (int) (rand % max);
     }
-
 
 }

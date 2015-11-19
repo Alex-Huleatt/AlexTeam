@@ -13,12 +13,24 @@ import java.util.Arrays;
 import java.util.HashSet;
 
 import AlexTeam.movement.pathplanning.AStar;
-import AlexTeam.movement.util.Common;
-import AlexTeam.movement.util.Geom;
+import AlexTeam.util.Common;
+import AlexTeam.util.Geom;
+import AlexTeam.util.Timer;
 import battlecode.common.Team;
+import battlecode.common.TerrainTile;
 
 /**
- *
+ * A movement handling class designed to have a pretty API.
+ * 
+ * Couple notes:
+ * Modulo 8 is equivalent to bit-wise AND with 7 (% 8 --> & 7), 
+ * except that it actually returns the correct value for negative numbers.
+ * 
+ * Directions are mapped to the integers mod 8, and then back again.
+ * 
+ * We have probabilistic cycle avoidance on the bugging.
+ * Seems to work pretty okay.
+ * 
  * @author alexhuleatt
  */
 public class MovementController {
@@ -36,6 +48,10 @@ public class MovementController {
 
     private MapLocation cycle_loc;
     private boolean cycle_check;
+    private double cycle_thresh;
+    private static final double init_cycle_thresh = .50;
+    private static final double min_cycle_thresh = .005;
+    private static final double cycle_mult = .9;
 
     private MapLocation me;
 
@@ -78,24 +94,20 @@ public class MovementController {
 
     public void bug(MapLocation goal) throws Exception {
         me = rc.getLocation();
-        rc.setIndicatorString(0, "moveTowards " + goal);
+
         if (goal == null) {
             return;
         }
+
+        // setup
         if (start == null || end == null || !goal.equals(end)) {
-            // setup
             start = rc.getLocation();
             end = goal;
             bug = false;
             closest = Integer.MAX_VALUE;
             cycle_check = false;
             cycle_loc = null;
-
-        }
-
-        if (Math.random() < .05) {
-            cycle_check = false;
-            cycle_loc = me;
+            cycle_thresh = init_cycle_thresh;
         }
 
         int disToGoal = me.distanceSquaredTo(goal);
@@ -105,25 +117,29 @@ public class MovementController {
             return;
         }
 
-        if (bug && Geom.locOnLine(start, goal, me)
-                && disToGoal < closest && !isObs(me.add(dirToGoal))) {
-            // we can stop bugging.
-            bug = false;
-            dir = Common.dirToInt(dirToGoal);
-            move(dirToGoal);
-            return;
+        if (Geom.locOnLine(start, end, me)) {
+            if (!isObs(me.add(dirToGoal))) {
+                if (bug) {
+                    if (disToGoal < closest) {
+                        stopBugging(dirToGoal);
+                        return;
+                    }
+                } else {
+                    move(dirToGoal);
+                }
+            }
         }
 
-        if (!bug && !isObs(me.add(dirToGoal))
-                && Geom.locOnLine(start, goal, me)) {
-            // we can move straight on the line
-            move(dirToGoal);
-            return;
+        //Cycle avoidance logic
+        if (Math.random() < cycle_thresh) {
+            cycle_check = false;
+            cycle_loc = me;
+        } else {
+            cycle_thresh = Math.max(cycle_thresh * cycle_mult, min_cycle_thresh);
         }
 
         if (bug && cycle_loc != null && me.distanceSquaredTo(cycle_loc) == 0) {
             if (cycle_check) {
-                //CYCLING
                 start = null;
                 bug(goal);
                 return;
@@ -132,7 +148,8 @@ public class MovementController {
             }
         }
 
-        if (!bug) { //the initial transition. 2Spooky4me.
+        //the initial transition. 2Spooky4me.
+        if (!bug) {
             initBug();
             return;
         }
@@ -141,46 +158,28 @@ public class MovementController {
         if (nextMove != null) {
             move(me.directionTo(nextMove));
         } else {
-            dir = (dir + 4) % 8; //let us turn around
+            dir = (dir + 4) & 7; //let us turn around
             nextMove = trace();
             if (nextMove != null) {
                 move(me.directionTo(nextMove));
             } else {
-                //failure entirely. This should only happen with changing env.
-                //We'll restart bugging from the start.
                 start = null;
-                bug(goal); //this is really hacky and dangerous.
-                return;
+                bug(goal);
             }
         }
-        simpleMove(goal);
     }
 
     private MapLocation trace() throws Exception {
-        rc.setIndicatorString(0, "Tracing.");
-        MapLocation temp;
-        int mindir = -1;
-        int mindis = Integer.MAX_VALUE;
-
         int sd = (reverse) ? 1 : -1;
         Direction[] dirs = Common.directions;
-        for (int i = -2; i <= 2; i++) {
-            int d = (dir + i + 8) % 8;
-            if (Common.isObstacle(rc, Common.directions[d])) {
-                continue;
-            }
-            temp = me.add(dirs[d]);
-            int dis = temp.distanceSquaredTo(me.add(dirs[((dir + 2 * sd) + 8) % 8]));
-            if ((isObs(me.add(dirs[(d + sd + 8) % 8])) && dis < mindis)) {
-                mindir = d;
-                mindis = dis;
+        int side_dir = (dir+2*sd)&7;
+        for (int i = 0; i <= 4; ++i) {
+            int d = ((side_dir-i*sd)) & 7;
+            if (!isObs(me.add(dirs[d])) && isObs(me.add(dirs[(d+sd)&7]))) {
+                return me.add(dirs[d]);
             }
         }
-        if (mindir == -1) {
-            return null;
-        } else {
-            return me.add(Common.directions[mindir]);
-        }
+        return null;
     }
 
     private boolean initReverse(MapLocation goal) {
@@ -203,19 +202,18 @@ public class MovementController {
     }
 
     public boolean simpleMove(MapLocation goal) throws Exception {
-        rc.setIndicatorString(0, "Simple move: " + goal);
         Direction d = me.directionTo(goal);
         int d_2_g = Common.dirToInt(d);
         MapLocation next;
         int td;
         for (int i = 0; i <= 4; i++) {
-            td = (d_2_g + i) % 8;
+            td = (d_2_g + i) & 7;
             next = me.add(Common.directions[td]);
             if (!Common.isObstacle(rc, next)) {
                 move(td);
                 return true;
             }
-            td = (d_2_g - i + 8) % 8;
+            td = (d_2_g - i) & 7;
             next = me.add(Common.directions[td]);
             if (!Common.isObstacle(rc, next)) {
                 move(td);
@@ -225,30 +223,20 @@ public class MovementController {
         return false;
     }
 
-    public void initBug() throws Exception {
-        //the initial move is important.
+    private void initBug() throws Exception {
         bug = true;
-        rc.setIndicatorString(0, "Initial.");
-        MapLocation t_clos = null;
-        int minDis = Integer.MAX_VALUE;
-        for (int i = 0; i <= 7; i++) {
-            MapLocation t = me.add(Common.directions[(dir + i + 8) % 8]);
-            int t_dis = t.distanceSquaredTo(end);
-            if (!isObs(t) && t_dis < minDis) {
-                t_clos = t;
-                minDis = t_dis;
-            }
-        }
-        if (t_clos == null) {
-            simpleMove(end);
-            return;
-        }
-        move(me.directionTo(t_clos));
+        simpleMove(end);
         reverse = initReverse(end);
-
         closest = me.distanceSquaredTo(end);
         cycle_loc = me;
         cycle_check = false;
+        cycle_thresh = init_cycle_thresh;
+    }
+
+    private void stopBugging(Direction dirToGoal) throws Exception {
+        bug = false;
+        dir = Common.dirToInt(dirToGoal);
+        move(dirToGoal);
     }
 
     public boolean isObs(MapLocation m) throws Exception {
